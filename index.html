@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AFlema Bus | Fleet Control</title>
+    <link rel="icon" href="img/favicon.ico">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class', // 啟用類別模式以配合 Vue 狀態
+            theme: {
+                extend: {
+                    colors: {
+                        'nm-bg': '#e0e5ec',
+                        'nm-red': '#BE1E2D',
+                        'nm-text': '#2D3436',
+                        'nm-label': '#8E8E93',
+                        'nm-green': '#27AE60',
+                        // 夜間模式配色
+                        'dark-bg': '#2a2e35',
+                        'dark-text': '#e0e5ec',
+                    },
+                    boxShadow: {
+                        // 淺色模式陰影
+                        'nm-card': '25px 25px 50px #b8bfc9, -25px -25px 50px #ffffff',
+                        'nm-inset': 'inset 6px 6px 10px #b8bfc9, inset -6px -6px 10px #ffffff',
+                        'nm-inset-sm': 'inset 3px 3px 6px #b8bfc9, inset -3px -3px 6px #ffffff',
+                        'nm-btn': '8px 8px 16px #b8bfc9, -8px -8px 16px #ffffff',
+                        'nm-btn-active': 'inset 4px 4px 8px #b8bfc9, inset -4px -4px 8px #ffffff',
+                        // 夜間模式陰影 (深色環境需調低對比)
+                        'dark-card': '20px 20px 40px #1d2025, -20px -20px 40px #373c45',
+                        'dark-inset': 'inset 6px 6px 10px #1d2025, inset -6px -6px 10px #373c45',
+                        'dark-inset-sm': 'inset 3px 3px 6px #1d2025, inset -3px -3px 6px #373c45',
+                        'dark-btn': '8px 8px 16px #1d2025, -8px -8px 16px #373c45',
+                        'dark-btn-active': 'inset 4px 4px 8px #1d2025, inset -4px -4px 8px #373c45',
+                    },
+                    animation: {
+                        'pulse-glow': 'pulse-glow 2s infinite alternate',
+                        'shake': 'shake 0.4s cubic-bezier(.36,.07,.19,.97) both',
+                    },
+                    keyframes: {
+                        'pulse-glow': {
+                            'from': { textShadow: '0 0 10px #fff, 0 0 15px rgba(190,30,45,0.2)' },
+                            'to': { textShadow: '0 0 18px #fff, 0 0 25px rgba(190,30,45,0.5)' },
+                        },
+                        'shake': {
+                            '10%, 90%': { transform: 'translateX(-1px)' },
+                            '20%, 80%': { transform: 'translateX(2px)' },
+                            '30%, 50%, 70%': { transform: 'translateX(-4px)' },
+                            '40%, 60%': { transform: 'translateX(4px)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style type="text/tailwindcss">
+        @layer components {
+            .nm-input {
+                @apply w-full px-6 py-[14px] bg-nm-bg dark:bg-dark-bg rounded-[22px] border-2 border-transparent 
+                       shadow-nm-inset dark:shadow-dark-inset outline-none transition-all duration-300 text-[16px] text-nm-text dark:text-dark-text
+                       placeholder:text-nm-label focus:border-white/50 focus:shadow-nm-inset-sm dark:focus:shadow-dark-inset-sm;
+            }
+            .nm-btn {
+                @apply w-full py-4 bg-nm-bg dark:bg-dark-bg rounded-[22px] shadow-nm-btn dark:shadow-dark-btn 
+                       text-nm-red font-black text-[18px] tracking-[6px] 
+                       active:shadow-nm-btn-active dark:active:shadow-dark-btn-active active:scale-[0.98] transition-all duration-300;
+            }
+        }
+        
+        .border-error-glow {
+            border-color: rgba(190, 30, 45, 0.4) !important;
+            box-shadow: inset 6px 6px 10px #b8bfc9, 
+                        inset -6px -6px 10px #ffffff, 
+                        0 0 15px rgba(190, 30, 45, 0.3) !important;
+        }
+
+        /* 處理 HTML 根節點背景色，確保切換時不閃爍 */
+        html.dark body { background-color: #2a2e35; }
+        body { 
+            background-color: #e0e5ec; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+            transition: background-color 0.5s ease;
+        }
+    </style>
+</head>
+
+<body class="min-h-screen flex items-center justify-center overflow-hidden">
+
+<div id="app" :class="{'pointer-events-none': isLogining, 'dark': isDarkMode}" class="w-full h-full flex items-center justify-center">
+    
+    <div class="fixed top-8 right-10 z-[110] flex items-center gap-4 px-6 py-3 rounded-full bg-nm-bg dark:bg-dark-bg shadow-nm-btn dark:shadow-dark-btn transition-all duration-500">
+        <span class="text-[13px] font-bold text-nm-text dark:text-dark-text tracking-widest uppercase">Dark Mode</span>
+        <label class="relative inline-block w-12 h-6 cursor-pointer">
+            <input type="checkbox" v-model="isDarkMode" class="sr-only peer">
+            <div class="w-full h-full bg-nm-bg dark:bg-dark-bg rounded-full shadow-nm-inset dark:shadow-dark-inset
+                        peer-checked:bg-nm-green transition-all duration-300"></div>
+            <div class="absolute top-[3px] left-[3px] w-[18px] h-[18px] rounded-full bg-nm-bg dark:bg-nm-label
+                        shadow-[2px_2px_4px_#b8bfc9,-1px_-1px_2px_#ffffff] dark:shadow-none
+                        transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]
+                        peer-checked:translate-x-[24px]"></div>
+        </label>
+    </div>
+
+    <div class="fixed top-[30px] left-10 z-[100] flex items-center transition-all duration-700"
+         :class="isLogining ? 'translate-y-[-50px] opacity-0' : 'opacity-100'">
+        <img v-if="logoVisible" src="img/logo.png" alt="Logo" class="max-h-10 w-auto mr-[10px]" @error="logoVisible = false">
+        <div v-if="!logoVisible" class="flex items-baseline -skew-x-12 cursor-default select-none tracking-[2px]">
+            <span class="text-[30px] font-black text-nm-red">Jass</span>
+            <span class="text-[28px] font-light text-white dark:text-white/80 ml-1">Lin</span>
+        </div>
+    </div>
+
+    <div class="w-full max-w-[420px] p-[50px] rounded-[50px] bg-nm-bg dark:bg-dark-bg shadow-nm-card dark:shadow-dark-card text-center relative z-10 transition-all duration-700"
+         :class="isLogining ? 'scale-[0.92] blur-sm opacity-0' : 'opacity-100'">
+        
+        <div class="mb-10">
+            <h1 class="text-[36px] font-extrabold text-nm-text dark:text-dark-text tracking-tight flex justify-center items-center">
+                <span class="text-nm-red mr-1 animate-pulse-glow" 
+                      style="text-shadow: 0 0 15px rgba(255,255,255,0.8), 0 0 25px rgba(190,30,45,0.3);">A</span>
+                <span :class="isDarkMode ? 'text-white/90' : 'text-[#333]'" 
+                      style="text-shadow: 3px 4px 6px rgba(0,0,0,0.15);">Flema Bus</span>
+            </h1>
+            <p class="text-[20px] text-nm-text dark:text-dark-text mt-3 font-bold tracking-[6px] opacity-80">車隊管理系統</p>
+        </div>
+
+        <form @submit.prevent="handleLogin" class="space-y-[22px]">
+            <div :class="{'animate-shake': errors.account}">
+                <input type="text" v-model="form.account" @input="clearError('account')" 
+                       class="nm-input" 
+                       :class="{'border-error-glow': errors.account}" 
+                       placeholder="帳戶">
+            </div>
+        
+            <div class="relative" :class="{'animate-shake': errors.password}">
+                <input :type="isVisible ? 'text' : 'password'" v-model="form.password" @input="clearError('password')" 
+                       class="nm-input" 
+                       :class="{'border-error-glow': errors.password}" 
+                       placeholder="密碼">
+                <div class="absolute right-[22px] top-1/2 -translate-y-1/2 cursor-pointer w-5 h-5 fill-nm-label/60 hover:fill-nm-red z-20" @click="isVisible = !isVisible">
+                    <svg v-if="isVisible" viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+                    <svg v-else viewBox="0 0 24 24"><path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.82l2.92 2.92c1.51-1.26 2.7-2.89 3.44-4.74-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z"/></svg>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between pl-[24px] pr-[10px] py-1">
+                <span class="text-[17px] text-nm-text dark:text-dark-text font-bold opacity-90">記住帳戶</span>
+                <label class="relative inline-block w-12 h-6 cursor-pointer">
+                    <input type="checkbox" v-model="form.remember" class="sr-only peer">
+                    <div class="w-full h-full bg-nm-bg dark:bg-dark-bg rounded-full shadow-nm-inset dark:shadow-dark-inset
+                                peer-checked:bg-nm-green transition-all duration-300"></div>
+                    <div class="absolute top-[3px] left-[3px] w-[18px] h-[18px] rounded-full bg-nm-bg dark:bg-nm-label
+                                shadow-[2px_2px_4px_#b8bfc9,-1px_-1px_2px_#ffffff] dark:shadow-none
+                                transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]
+                                peer-checked:translate-x-[24px]"></div>
+                </label>
+            </div>
+
+            <div class="h-10 flex items-center justify-center">
+                <span v-if="loginError" class="text-nm-red font-bold animate-shake">⚠️ {{ loginErrorMessage }}</span>
+            </div>
+
+            <button type="submit" class="nm-btn">
+                {{ isLogining ? 'VERIFYING...' : '登入' }}
+            </button>
+        </form>
+
+        <div class="mt-8 pt-4 border-t border-white/20">
+            <p class="text-[11px] text-nm-label tracking-widest font-medium uppercase opacity-60">
+                © 2026 Flema Fleet Management
+            </p>
+            <p class="text-[10px] text-nm-label/50 mt-1">
+                Central Control System v2.4.0-Stable
+            </p>
+        </div>
+    </div>
+
+    <div class="fixed inset-0 flex flex-col justify-center items-center transition-all duration-1000 delay-500 pointer-events-none"
+         :class="isLogining ? 'opacity-100 scale-100' : 'opacity-0 scale-110'">
+        <h2 class="text-nm-red text-[26px] tracking-[8px] font-black">AUTHORIZED</h2>
+        <p class="text-nm-label text-[12px] mt-[5px]">ACCESSING CENTRAL CONTROL SYSTEM...</p>
+        <div class="w-[200px] h-2 bg-nm-bg dark:bg-dark-bg rounded-full shadow-nm-inset-sm dark:shadow-dark-inset-sm mt-[30px] overflow-hidden">
+            <div class="h-full bg-nm-red shadow-[0_0_15px_#BE1E2D] transition-all duration-[1800ms] ease-in-out"
+                 :style="{ width: isLogining ? '100%' : '0%' }"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const { createApp, ref, watch } = Vue;
+    createApp({
+        setup() {
+            const isVisible = ref(false); 
+            const isLogining = ref(false); 
+            const loginError = ref(false); 
+            const loginErrorMessage = ref(''); 
+            const logoVisible = ref(true); 
+            
+            // 夜間模式狀態
+            const isDarkMode = ref(false);
+
+            const form = ref({ account: '', password: '', remember: false });
+            const errors = ref({ account: false, password: false });
+
+            // 監聽模式切換，同步更新 HTML class 以驅動 Tailwind dark: 類別
+            watch(isDarkMode, (val) => {
+                if (val) {
+                    document.documentElement.classList.add('dark');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                }
+            });
+
+            const clearError = (field) => { 
+                if (field) {
+                    errors.value[field] = false;
+                } else {
+                    errors.value.account = false; 
+                    errors.value.password = false;
+                }
+                loginError.value = false; 
+            };
+            
+            const handleLogin = () => {
+                clearError();
+                
+                setTimeout(() => {
+                    let hasError = false;
+                    if (!form.value.account) { 
+                        errors.value.account = true; 
+                        hasError = true;
+                    }
+                    if (!form.value.password) { 
+                        errors.value.password = true; 
+                        hasError = true;
+                    }
+
+                    if (hasError) {
+                        loginErrorMessage.value = "請輸入帳號與密碼";
+                        loginError.value = true;
+                        return;
+                    }
+
+                    if (form.value.account === '123' && form.value.password === '123') {
+                        loginError.value = false;
+                        isLogining.value = true;
+                    } else {
+                        loginErrorMessage.value = "帳號或密碼錯誤";
+                        loginError.value = true;
+                        form.value.password = '';
+                        errors.value.account = true;
+                        errors.value.password = true;
+                    }
+                }, 10);
+            };
+
+            return { 
+                isVisible, isLogining, loginError, loginErrorMessage, 
+                form, errors, clearError, handleLogin, logoVisible,
+                isDarkMode
+            }
+        }
+    }).mount('#app');
+</script>
+
+</body>
+</html>
